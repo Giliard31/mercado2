@@ -200,7 +200,7 @@
             margin: 20px 0;
         }
 
-        /* Nova Janela de Pergunta de Valor (Modal do App) */
+        /* Modais Personalizados */
         .modal-pergunta {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -229,6 +229,12 @@
             margin-bottom: 15px;
             color: var(--dark);
             line-height: 1.4;
+        }
+
+        .botoes-lado-a-lado {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
         }
 
         /* Mensagens Modais e Alertas */
@@ -294,7 +300,7 @@
         .cupom-total { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 5px 0; margin-top: 10px; font-weight: bold; font-size: 15px; }
 
         @keyframes pop {
-            0% { transform: scale(0.8); opacity: 0; }
+            0 { transform: scale(0.8); opacity: 0; }
             100% { transform: scale(1); opacity: 1; }
         }
     </style>
@@ -318,7 +324,7 @@
         </div>
     </header>
 
-    <!-- Nova Janela de Entrada Própria (Substituta do Prompt do navegador) -->
+    <!-- Janela de Pergunta Inicial -->
     <div id="modalPerguntaInicial" class="modal-pergunta">
         <div class="modal-pergunta-card">
             <h3>🛒 Quanto temos para gastar no supermercado?</h3>
@@ -327,6 +333,31 @@
             </div>
             <button onclick="confirmarValorInicial()" class="btn btn-success">Começar Compras</button>
             <button onclick="fecharPerguntaInicial()" style="background: none; border: none; color: #7f8c8d; margin-top: 12px; font-size: 13px; cursor: pointer; text-decoration: underline;">Não quero definir valor</button>
+        </div>
+    </div>
+
+    <!-- NOVA JANELA: Confirmação de Estouro de Saldo Personalizada (Substitui o Confirm antigo) -->
+    <div id="modalConfirmarEstouro" class="modal-pergunta">
+        <div class="modal-pergunta-card">
+            <h3 style="color: var(--danger);">⚠️ Limite Ultrapassado!</h3>
+            <p id="textoEstouro" style="margin-bottom: 15px; font-size: 15px; color: #555;"></p>
+            <p style="font-weight: bold; margin-bottom: 15px;">Deseja adicionar mesmo assim?</p>
+            <div class="botoes-lado-a-lado">
+                <button onclick="aceitarEstouro()" class="btn btn-success" style="padding: 10px;">Sim, colocar</button>
+                <button onclick="cancelarEstouro()" class="btn btn-danger" style="padding: 10px; margin-top: 0;">Não adicionar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOVA JANELA: Confirmação de Limpar Tudo Personalizada -->
+    <div id="modalConfirmarLimpar" class="modal-pergunta">
+        <div class="modal-pergunta-card">
+            <h3 style="color: var(--danger);">🗑️ Limpar tudo?</h3>
+            <p style="margin-bottom: 20px; font-size: 15px; color: #555;">Isto apagará todos os itens do carrinho e zerará sua carteira.</p>
+            <div class="botoes-lado-a-lado">
+                <button onclick="confirmarLimparTudo()" class="btn btn-danger" style="padding: 10px; margin-top: 0;">Sim, limpar</button>
+                <button onclick="fecharModalLimpar()" class="btn btn-navy" style="padding: 10px; margin-top: 0; background-color: #7f8c8d;">Cancelar</button>
+            </div>
         </div>
     </div>
 
@@ -434,6 +465,9 @@
         let indiceEdicao = -1;
         let alertaDisparado = false;
 
+        // Variáveis temporárias para guardar o item caso estoure o orçamento
+        let itemTemporario = null;
+
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('overlay');
         const orcamentoInput = document.getElementById('orcamentoInput');
@@ -449,12 +483,15 @@
         
         const modalPergunta = document.getElementById('modalPerguntaInicial');
         const valorInicialInput = document.getElementById('valorInicialInput');
+        
+        const modalEstouro = document.getElementById('modalConfirmarEstouro');
+        const textoEstouro = document.getElementById('textoEstouro');
+        const modalLimpar = document.getElementById('modalConfirmarLimpar');
 
         function formatarMoeda(valor) {
             return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
         }
 
-        // Mostra a janela se a carteira estiver zerada (abre o app primeiro)
         function verificarValorInicial() {
             if (dados.orcamento === 0) {
                 modalPergunta.style.display = 'flex';
@@ -518,14 +555,20 @@
             const totalSimulado = simularTotalComNovoItem(valor, qtd);
             const saldoSimulado = dados.orcamento - totalSimulado;
 
+            // Substituição do confirm antigo por Modal próprio do App
             if (dados.orcamento > 0 && saldoSimulado < 0) {
                 const valorEstourado = Math.abs(saldoSimulado);
-                const permitir = confirm(`Atenção! Esta compra vai ultrapassar o valor da sua carteira em ${formatarMoeda(valorEstourado)}.\nPode passar do valor colocado na carteira?`);
-                if (!permitir) {
-                    return; 
-                }
+                itemTemporario = { nome, valor, qtd }; // Guarda o item
+                
+                textoEstouro.innerHTML = `Esta compra vai ultrapassar o valor da sua carteira em <strong>${formatarMoeda(valorEstourado)}</strong>.`;
+                modalEstouro.style.display = 'flex';
+                return; // Pausa a execução esperando o clique do modal
             }
 
+            confirmarAdicao(nome, valor, qtd);
+        }
+
+        function confirmarAdicao(nome, valor, qtd) {
             if (indiceEdicao === -1) {
                 dados.itens.push({ nome, valor, qtd });
             } else {
@@ -545,6 +588,20 @@
             valorInput.focus();
         }
 
+        function aceitarEstouro() {
+            modalEstouro.style.display = 'none';
+            if (itemTemporario) {
+                confirmarAdicao(itemTemporario.nome, itemTemporario.valor, itemTemporario.qtd);
+                itemTemporario = null;
+            }
+        }
+
+        function cancelarEstouro() {
+            modalEstouro.style.display = 'none';
+            itemTemporario = null;
+            valorInput.focus();
+        }
+
         function editarItem(index) {
             indiceEdicao = index;
             const item = dados.itens[index];
@@ -561,21 +618,27 @@
             valorInput.focus();
         }
 
+        // Substituição do confirm do botão "Limpar Tudo" por Modal próprio
         function limparTudo() {
-            if(confirm("Deseja mesmo limpar tudo?")) {
-                dados.itens = [];
-                dados.orcamento = 0.00;
-                indiceEdicao = -1;
-                alertaDisparado = false;
-                tituloForm.textContent = "Adicionar Item";
-                btnSalvarItem.textContent = "Adicionar à Lista";
-                btnSalvarItem.style.backgroundColor = "var(--primary)";
-                salvarDados();
-                atualizarTela();
-                
-                // Abre a janelinha estilizada logo após limpar tudo
-                verificarValorInicial();
-            }
+            modalLimpar.style.display = 'flex';
+        }
+
+        function confirmarLimparTudo() {
+            modalLimpar.style.display = 'none';
+            dados.itens = [];
+            dados.orcamento = 0.00;
+            indiceEdicao = -1;
+            alertaDisparado = false;
+            tituloForm.textContent = "Adicionar Item";
+            btnSalvarItem.textContent = "Adicionar à Lista";
+            btnSalvarItem.style.backgroundColor = "var(--primary)";
+            salvarDados();
+            atualizarTela();
+            verificarValorInicial();
+        }
+
+        function fecharModalLimpar() {
+            modalLimpar.style.display = 'none';
         }
 
         function fecharAlerta() {
@@ -679,7 +742,6 @@
 
         document.getElementById('anoAtual').textContent = new Date().getFullYear();
         
-        // Inicializa primeiro os elementos visuais do app e depois checa a janela
         atualizarTela();
         verificarValorInicial();
     </script>
